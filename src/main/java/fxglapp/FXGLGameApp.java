@@ -4,13 +4,15 @@ import com.almasb.fxgl.app.GameApplication;
 import com.almasb.fxgl.app.GameSettings;
 import com.almasb.fxgl.entity.Entity;
 import com.almasb.fxgl.entity.SpawnData;
+import fxglapp.cliente.CustomerFactory;
 import fxglapp.ui.FloorFactory;
 import javafx.geometry.Point2D;
 import java.util.Queue;
 import static com.almasb.fxgl.dsl.FXGL.*;
 import com.almasb.fxgl.animation.Interpolators;
+import com.almasb.fxgl.dsl.components.ProjectileComponent;
+import javafx.animation.Interpolator;
 import javafx.util.Duration;
-import fxglapp.cliente.CustomerFactory.EntityType;
 
 public class FXGLGameApp extends GameApplication {
 
@@ -43,13 +45,11 @@ public class FXGLGameApp extends GameApplication {
             }
         }
 
-        // Área de espera (lado izquierdo)
         for (int y = 0; y < getAppHeight(); y += TILE_SIZE) {
             spawn("concreteTile", new SpawnData(0, y));
             spawn("concreteTile", new SpawnData(TILE_SIZE, y));
         }
 
-        // Área del comedor (tablero)
         for (int x = TILE_SIZE * 2; x < getAppWidth(); x += TILE_SIZE) {
             for (int y = TILE_SIZE * 2; y < getAppHeight(); y += TILE_SIZE) {
                 spawn("floorTile",
@@ -114,27 +114,33 @@ public class FXGLGameApp extends GameApplication {
         }
     }
 
-    public void moveEntityTo(Entity entity, double targetX, double targetY) {
-
-        Point2D puntoInicial = new Point2D(100, 100); // Coordenadas del punto A
-        Point2D puntoFinal = new Point2D(400, 300);   // Coordenadas del punto B
-
-        entity.setPosition(puntoInicial);
-
-        animationBuilder()
-                .duration(Duration.seconds(2))
-                .interpolator(Interpolators.LINEAR.EASE_OUT())
-                .translate(entity)
-                .from(puntoInicial)
-                .to(puntoFinal)
-                .build()
-                .start();
-    }
-
     @Override
     protected void initGame() {
         getGameWorld().addEntityFactory(new FloorFactory());
+        getGameWorld().addEntityFactory(new CustomerFactory());
         createFloors();
+
+        spawnCustomer();
+    }
+
+    private void spawnCustomer() {
+
+        Entity customer = spawn("client_1", 65, 0);
+
+        int tempAnimation = 2;
+
+        for (int x = 0; x <= 10; x++) {
+            runOnce(() -> {
+                entityBuilder()
+                        .at(customer.getPosition())
+                        .with(new ProjectileComponent(new Point2D(0, 1), 1))
+                        .buildAndAttach();
+
+                customer.translate(0, 50);
+            }, Duration.seconds(tempAnimation));
+
+            tempAnimation += 2;
+        }
 
     }
 
