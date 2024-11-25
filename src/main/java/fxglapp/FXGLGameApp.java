@@ -129,19 +129,16 @@ public class FXGLGameApp extends GameApplication {
 
         int tempAnimation = 2;
 
-        for (int x = 0; x <= 10; x++) {
+        for (int x = 0; x <= 20; x++) {
             runOnce(() -> {
                 entityBuilder()
                         .at(customer.getPosition())
-                        .with(new ProjectileComponent(new Point2D(0, 1), 1))
+                        .with(new ProjectileComponent(new Point2D(0, 1), 100))
                         .buildAndAttach();
 
-                customer.translate(0, 50);
-            }, Duration.seconds(tempAnimation));
-
-            tempAnimation += 2;
+                customer.translate(0, 25);
+            }, Duration.seconds(0.2 * x));
         }
-
     }
 
     public static void main(String[] args) {
