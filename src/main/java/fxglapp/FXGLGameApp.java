@@ -16,6 +16,13 @@ import javafx.util.Duration;
 
 public class FXGLGameApp extends GameApplication {
 
+    private static final int TILE_SIZE = 64;
+    private static final int[][] TABLE_POSITIONS = {
+            {3, 3}, {5, 3}, {7, 3}, {9, 3},
+            {3, 5}, {5, 5}, {7, 5}, {9, 5},
+            {3, 7}, {5, 7}, {7, 7}, {9, 7}
+    };
+
     @Override
     protected void initSettings(GameSettings settings) {
         settings.setWidth(850);
@@ -124,12 +131,11 @@ public class FXGLGameApp extends GameApplication {
     }
 
     private void spawnCustomer() {
-
         Entity customer = spawn("client_1", 65, 0);
 
-        int tempAnimation = 2;
-
+        // Primera animación: mover hacia la entrada
         for (int x = 0; x <= 20; x++) {
+            final int step = x;
             runOnce(() -> {
                 entityBuilder()
                         .at(customer.getPosition())
@@ -137,7 +143,63 @@ public class FXGLGameApp extends GameApplication {
                         .buildAndAttach();
 
                 customer.translate(0, 25);
+
+                // Cuando llegue a la entrada, mover hacia una mesa aleatoria
+                if (step == 20) {
+                    moveToRandomTable(customer);
+                }
             }, Duration.seconds(0.2 * x));
+        }
+    }
+
+    private void moveToRandomTable(Entity customer) {
+
+        int randomTableIndex = (int)(Math.random() * TABLE_POSITIONS.length);
+        int[] targetTable = TABLE_POSITIONS[randomTableIndex];
+
+        double targetX = targetTable[0] * TILE_SIZE;
+        double targetY = targetTable[1] * TILE_SIZE;
+
+
+        Point2D currentPos = customer.getPosition();
+
+        double diffX = targetX - currentPos.getX();
+        double diffY = targetY - currentPos.getY();
+
+        int stepsX = (int)Math.abs(diffX / 25);
+        if (stepsX > 0) {
+            for (int i = 0; i <= stepsX; i++) {
+                final int step = i;
+                runOnce(() -> {
+                    entityBuilder()
+                            .at(customer.getPosition())
+                            .with(new ProjectileComponent(new Point2D(diffX > 0 ? 1 : -1, 0), 100))
+                            .buildAndAttach();
+
+                    customer.translate(diffX > 0 ? 25 : -25, 0);
+
+                    if (step == stepsX) {
+                        moveCustomerY(customer, diffY);
+                    }
+                }, Duration.seconds(0.2 * i));
+            }
+        } else {
+            // Si no hay movimiento en X, comenzar directamente con Y
+            moveCustomerY(customer, diffY);
+        }
+    }
+
+    private void moveCustomerY(Entity customer, double diffY) {
+        int stepsY = (int)Math.abs(diffY / 25);
+        for (int i = 0; i <= stepsY; i++) {
+            runOnce(() -> {
+                entityBuilder()
+                        .at(customer.getPosition())
+                        .with(new ProjectileComponent(new Point2D(0, diffY > 0 ? 1 : -1), 100))
+                        .buildAndAttach();
+
+                customer.translate(0, diffY > 0 ? 25 : -25);
+            }, Duration.seconds(0.2 * i));
         }
     }
 
