@@ -120,7 +120,13 @@ public class FXGLGameApp extends GameApplication {
         getGameWorld().addEntityFactory(new CustomerFactory());
         createFloors();
 
+        // Generar un cliente inicial
         spawnCustomer();
+
+        // Generar clientes periódicamente
+        run(() -> {
+            spawnCustomer();
+        }, Duration.seconds(5)); // Cada 5 segundos
     }
 
     private void spawnCustomer() {
