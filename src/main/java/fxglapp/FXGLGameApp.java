@@ -5,9 +5,12 @@ import com.almasb.fxgl.app.GameSettings;
 import com.almasb.fxgl.entity.Entity;
 import com.almasb.fxgl.entity.SpawnData;
 import fxglapp.cliente.CustomerFactory;
+import fxglapp.table.RestaurantManager;
 import fxglapp.ui.FloorFactory;
 import javafx.geometry.Point2D;
 import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
+
 import static com.almasb.fxgl.dsl.FXGL.*;
 import com.almasb.fxgl.animation.Interpolators;
 import com.almasb.fxgl.dsl.components.ProjectileComponent;
@@ -17,11 +20,9 @@ import javafx.util.Duration;
 public class FXGLGameApp extends GameApplication {
 
     private static final int TILE_SIZE = 64;
-    private static final int[][] TABLE_POSITIONS = {
-            {3, 3}, {5, 3}, {7, 3}, {9, 3},
-            {3, 5}, {5, 5}, {7, 5}, {9, 5},
-            {3, 7}, {5, 7}, {7, 7}, {9, 7}
-    };
+    private static final Queue<Entity> waitingCustomers = new ConcurrentLinkedQueue<>();
+    private static final int MAX_WAITING_CUSTOMERS = 5;
+    private boolean isSpawningPaused = false;
 
     @Override
     protected void initSettings(GameSettings settings) {
@@ -29,6 +30,11 @@ public class FXGLGameApp extends GameApplication {
         settings.setHeight(670);
         settings.setTitle("Restaurant Game");
     }
+    private static final int[][] TABLE_POSITIONS = {
+            {3, 3}, {5, 3}, {7, 3}, {9, 3},
+            {3, 5}, {5, 5}, {7, 5}, {9, 5},
+            {3, 7}, {5, 7}, {7, 7}, {9, 7}
+    };
 
     public void createFloors() {
 
@@ -127,19 +133,51 @@ public class FXGLGameApp extends GameApplication {
         getGameWorld().addEntityFactory(new CustomerFactory());
         createFloors();
 
+        // Inicializar el RestaurantManager con las posiciones de las mesas
+        RestaurantManager.initialize(TILE_SIZE);
+
         // Generar un cliente inicial
         spawnCustomer();
 
         // Generar clientes periódicamente
         run(() -> {
-            spawnCustomer();
-        }, Duration.seconds(0.5)); // Cada 5 segundos
+            if (!isSpawningPaused) {
+                spawnCustomer();
+            }
+        }, Duration.seconds(0.5));
+
+        // Monitor de capacidad del restaurante
+        run(() -> {
+            isSpawningPaused = waitingCustomers.size() >= MAX_WAITING_CUSTOMERS;
+        }, Duration.seconds(0.1));
     }
 
     private void spawnCustomer() {
         Entity customer = spawn("client_1", 65, 0);
 
         // Primera animación: mover hacia la entrada
+        moveCustomerToEntrance(customer);
+    }
+
+    private void handleCustomerArrival(Entity customer) {
+        if (RestaurantManager.hasAvailableTable()) {
+            // Si hay mesa disponible, mover al cliente directamente
+            Point2D tablePosition = RestaurantManager.assignTableToCustomer(customer);
+            if (tablePosition != null) {
+                moveCustomerToTable(customer, tablePosition);
+            }
+        } else if (waitingCustomers.size() < MAX_WAITING_CUSTOMERS) {
+            // Si no hay mesa pero hay espacio para esperar
+            waitingCustomers.offer(customer);
+            moveCustomerToWaitingArea(customer, waitingCustomers.size());
+        } else {
+            // Si no hay espacio, el cliente se va
+            moveCustomerOut(customer);
+        }
+    }
+
+
+    private void moveCustomerToEntrance(Entity customer) {
         for (int x = 0; x <= 20; x++) {
             final int step = x;
             runOnce(() -> {
@@ -150,64 +188,80 @@ public class FXGLGameApp extends GameApplication {
 
                 customer.translate(0, 25);
 
-                // Cuando llegue a la entrada, mover hacia una mesa aleatoria
+                // Cuando llegue a la entrada, intentar asignar mesa o esperar
                 if (step == 20) {
-                    moveToRandomTable(customer);
+                    handleCustomerArrival(customer);
                 }
             }, Duration.seconds(0.2 * x));
         }
     }
 
-    private void moveToRandomTable(Entity customer) {
+    private void moveCustomerToWaitingArea(Entity customer, int position) {
+        // Calcular posición en el área de espera basada en la posición en la cola
+        double waitingX = 65;
+        double waitingY = 300 + (position * 50); // Espaciado vertical entre clientes en espera
 
-        int randomTableIndex = (int)(Math.random() * TABLE_POSITIONS.length);
-        int[] targetTable = TABLE_POSITIONS[randomTableIndex];
+        animationBuilder()
+                .duration(Duration.seconds(1))
+                .interpolator(Interpolators.SMOOTH.EASE_OUT())
+                .translate(customer)
+                .to(new Point2D(waitingX, waitingY))
+                .buildAndAttach();
 
-        double targetX = targetTable[0] * TILE_SIZE;
-        double targetY = targetTable[1] * TILE_SIZE;
-
-
-        Point2D currentPos = customer.getPosition();
-
-        double diffX = targetX - currentPos.getX();
-        double diffY = targetY - currentPos.getY();
-
-        int stepsX = (int)Math.abs(diffX / 25);
-        if (stepsX > 0) {
-            for (int i = 0; i <= stepsX; i++) {
-                final int step = i;
-                runOnce(() -> {
-                    entityBuilder()
-                            .at(customer.getPosition())
-                            .with(new ProjectileComponent(new Point2D(diffX > 0 ? 1 : -1, 0), 100))
-                            .buildAndAttach();
-
-                    customer.translate(diffX > 0 ? 25 : -25, 0);
-
-                    if (step == stepsX) {
-                        moveCustomerY(customer, diffY);
-                    }
-                }, Duration.seconds(0.2 * i));
+        // Registrar el cliente para ser notificado cuando haya mesa disponible
+        RestaurantManager.addWaitingCustomer(customer, () -> {
+            Point2D tablePosition = RestaurantManager.assignTableToCustomer(customer);
+            if (tablePosition != null) {
+                waitingCustomers.remove(customer);
+                moveCustomerToTable(customer, tablePosition);
             }
-        } else {
-            // Si no hay movimiento en X, comenzar directamente con Y
-            moveCustomerY(customer, diffY);
-        }
+        });
     }
 
-    private void moveCustomerY(Entity customer, double diffY) {
-        int stepsY = (int)Math.abs(diffY / 25);
-        for (int i = 0; i <= stepsY; i++) {
-            runOnce(() -> {
-                entityBuilder()
-                        .at(customer.getPosition())
-                        .with(new ProjectileComponent(new Point2D(0, diffY > 0 ? 1 : -1), 100))
-                        .buildAndAttach();
+    private void moveCustomerToTable(Entity customer, Point2D tablePosition) {
+        // Primero mover en X
+        double diffX = tablePosition.getX() - customer.getX();
+        double diffY = tablePosition.getY() - customer.getY();
 
-                customer.translate(0, diffY > 0 ? 25 : -25);
-            }, Duration.seconds(0.2 * i));
-        }
+        animationBuilder()
+                .duration(Duration.seconds(1))
+                .interpolator(Interpolators.SMOOTH.EASE_OUT())
+                .translate(customer)
+                .to(new Point2D(tablePosition.getX(), customer.getY()))
+                .onFinished(() -> {
+                    // Luego mover en Y
+                    animationBuilder()
+                            .duration(Duration.seconds(1))
+                            .interpolator(Interpolators.SMOOTH.EASE_OUT())
+                            .translate(customer)
+                            .to(tablePosition)
+                            .onFinished(() -> {
+                                // Cuando el cliente llega a la mesa, programar su salida
+                                RestaurantManager.handleCustomerSeated(customer, () -> {
+                                    moveCustomerOut(customer);
+                                });
+                            })
+                            .buildAndAttach();
+                })
+                .buildAndAttach();
     }
+
+    private void moveCustomerOut(Entity customer) {
+        Point2D exitPoint = new Point2D(65, getAppHeight() + 100);
+
+        animationBuilder()
+                .duration(Duration.seconds(2))
+                .interpolator(Interpolators.SMOOTH.EASE_IN())
+                .translate(customer)
+                .to(exitPoint)
+                .onFinished(() -> {
+                    customer.removeFromWorld();
+                    RestaurantManager.handleCustomerLeft();
+                })
+                .buildAndAttach();
+    }
+
+
 
     public static void main(String[] args) {
         launch(args);
