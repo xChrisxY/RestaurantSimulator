@@ -133,7 +133,7 @@ public class FXGLGameApp extends GameApplication {
         // Generar clientes periódicamente
         run(() -> {
             spawnCustomer();
-        }, Duration.seconds(5)); // Cada 5 segundos
+        }, Duration.seconds(0.5)); // Cada 5 segundos
     }
 
     private void spawnCustomer() {
