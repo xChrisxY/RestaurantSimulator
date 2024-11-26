@@ -127,13 +127,13 @@ public class FXGLGameApp extends GameApplication {
         getGameWorld().addEntityFactory(new CustomerFactory());
         createFloors();
 
+        //generateCustomers();
         spawnCustomer();
     }
 
     private void spawnCustomer() {
         Entity customer = spawn("client_1", 65, 0);
 
-        // Primera animación: mover hacia la entrada
         for (int x = 0; x <= 20; x++) {
             final int step = x;
             runOnce(() -> {
@@ -144,7 +144,6 @@ public class FXGLGameApp extends GameApplication {
 
                 customer.translate(0, 25);
 
-                // Cuando llegue a la entrada, mover hacia una mesa aleatoria
                 if (step == 20) {
                     moveToRandomTable(customer);
                 }
@@ -159,7 +158,6 @@ public class FXGLGameApp extends GameApplication {
 
         double targetX = targetTable[0] * TILE_SIZE;
         double targetY = targetTable[1] * TILE_SIZE;
-
 
         Point2D currentPos = customer.getPosition();
 
@@ -184,7 +182,7 @@ public class FXGLGameApp extends GameApplication {
                 }, Duration.seconds(0.2 * i));
             }
         } else {
-            // Si no hay movimiento en X, comenzar directamente con Y
+
             moveCustomerY(customer, diffY);
         }
     }
