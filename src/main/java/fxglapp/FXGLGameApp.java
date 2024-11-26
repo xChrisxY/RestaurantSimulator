@@ -7,6 +7,8 @@ import com.almasb.fxgl.entity.SpawnData;
 import fxglapp.cliente.CustomerFactory;
 import fxglapp.ui.FloorFactory;
 import javafx.geometry.Point2D;
+
+import java.util.LinkedList;
 import java.util.Queue;
 import static com.almasb.fxgl.dsl.FXGL.*;
 import com.almasb.fxgl.animation.Interpolators;
@@ -22,6 +24,17 @@ public class FXGLGameApp extends GameApplication {
             {3, 5}, {5, 5}, {7, 5}, {9, 5},
             {3, 7}, {5, 7}, {7, 7}, {9, 7}
     };
+    // para las mesas disponibles
+    private boolean[] tableOccupied = new boolean[TABLE_POSITIONS.length];
+    // [+] Para que la mesera atienda
+    private Queue<Entity> serveQueue = new LinkedList<>(); // Cola para rastrear los clientes a ser atendidos
+    private boolean isWaiterAvailable = true;
+    private Entity waiter;
+
+    // llegada de clientes
+    private Queue<Entity> waitingCustomers = new LinkedList<>();
+    private static final int MAX_RESTAURANT_CUSTOMERS = 12;
+    private static final int TOTAL_CUSTOMERS = 20;
 
     @Override
     protected void initSettings(GameSettings settings) {
@@ -84,17 +97,19 @@ public class FXGLGameApp extends GameApplication {
         int chefTableX2 = 600;
         int chefTableY2 = (TILE_SIZE / 2);
 
-        spawn("tableCook", new SpawnData(chefTableX1, chefTableY1)); // Primera mesa
-        spawn("tableCook", new SpawnData(chefTableX2, chefTableY2)); // Segunda mesa
+        spawn("tableCook", new SpawnData(chefTableX1, chefTableY1));
+        spawn("tableCook", new SpawnData(chefTableX2, chefTableY2));
 
-        spawn("cooker", new SpawnData(chefTableX1, chefTableY1-50)); // Primera mesa
-        spawn("cooker", new SpawnData(chefTableX2, chefTableY2-50)); // Segunda mesa
+        spawn("cooker", new SpawnData(chefTableX1, chefTableY1-50));
+        spawn("cooker", new SpawnData(chefTableX2, chefTableY2-50));
 
-        spawn("kitchenset", new SpawnData(500, 25)); // Segunda mesa
-        spawn("kitchenset", new SpawnData(200, 25)); // Segunda mesa
+        spawn("kitchenset", new SpawnData(500, 25));
+        spawn("kitchenset", new SpawnData(200, 25));
 
-        spawn("dishes", new SpawnData(730, 25)); // Segunda mesa
-        spawn("drinkbox", new SpawnData(400, 25)); // Segunda mesa
+        spawn("dishes", new SpawnData(730, 25));
+        spawn("drinkbox", new SpawnData(400, 25));
+
+        //spawn("waiter", new SpawnData(680, 90));
 
         int yPositonWall = 0;
         for (int x = 0; x <= 5; x++) {
@@ -103,9 +118,9 @@ public class FXGLGameApp extends GameApplication {
 
         }
 
-        spawn("door", new SpawnData(120, 540)); // Segunda mesa
+        spawn("door", new SpawnData(120, 540));
         spawn("open", new SpawnData(65, 500));
-        spawn("tejado", new SpawnData(105, 200)); // Segunda mesa
+        spawn("tejado", new SpawnData(105, 200));
         spawn("bush", new SpawnData(200, 600));
         spawn("trash", new SpawnData(770, 590));
         spawn("lamp", new SpawnData(140, 80));
@@ -127,13 +142,34 @@ public class FXGLGameApp extends GameApplication {
         getGameWorld().addEntityFactory(new CustomerFactory());
         createFloors();
 
-        spawnCustomer();
+        //generateCustomers();
+        //spawnCustomer();
+        waiter = spawn("waiter", new SpawnData(680, 90));
+        spawnCustomersSequence();
+
     }
 
-    private void spawnCustomer() {
-        Entity customer = spawn("client_1", 65, 0);
+    private void spawnCustomersSequence() {
+        for (int i = 1; i <= TOTAL_CUSTOMERS; i++) {
+            final int customerNumber = i;
+            runOnce(() -> {
+                Entity customer = spawn("client_1", 65, 0);
 
-        // Primera animación: mover hacia la entrada
+                if (getGameWorld().getEntities().stream().filter(e -> e.getType().toString().contains("client")).count() < TOTAL_CUSTOMERS) {
+
+                    moveCustomerInside(customer);
+
+                } else {
+
+                    waitingCustomers.offer(customer);
+                    positionCustomerInWaitingLine(customer);
+                }
+            }, Duration.seconds(customerNumber * 2)); // Espaciar la llegada
+        }
+    }
+
+    private void moveCustomerInside(Entity customer) {
+        // Tu lógica de movimiento existente
         for (int x = 0; x <= 20; x++) {
             final int step = x;
             runOnce(() -> {
@@ -144,7 +180,43 @@ public class FXGLGameApp extends GameApplication {
 
                 customer.translate(0, 25);
 
-                // Cuando llegue a la entrada, mover hacia una mesa aleatoria
+                if (step == 20) {
+                    moveToRandomTable(customer);
+
+                    // Si hay clientes esperando, mover el siguiente
+                    checkAndMoveWaitingCustomer();
+                }
+            }, Duration.seconds(0.2 * x));
+        }
+    }
+
+    private void positionCustomerInWaitingLine(Entity customer) {
+        int waitingLineX = 10;  // Posición X de la fila de espera
+        int waitingLineY = 25 + (waitingCustomers.size() * 65);  // Espaciar clientes verticalmente
+
+        customer.setPosition(waitingLineX, waitingLineY);
+    }
+
+    private void checkAndMoveWaitingCustomer() {
+        if (!waitingCustomers.isEmpty()) {
+            Entity waitingCustomer = waitingCustomers.poll();
+            moveToRandomTable(waitingCustomer);
+        }
+    }
+
+    private void spawnCustomer() {
+        Entity customer = spawn("client_1", 65, 0);
+
+        for (int x = 0; x <= 20; x++) {
+            final int step = x;
+            runOnce(() -> {
+                entityBuilder()
+                        .at(customer.getPosition())
+                        .with(new ProjectileComponent(new Point2D(0, 1), 100))
+                        .buildAndAttach();
+
+                customer.translate(0, 25);
+
                 if (step == 20) {
                     moveToRandomTable(customer);
                 }
@@ -152,14 +224,25 @@ public class FXGLGameApp extends GameApplication {
         }
     }
 
-    private void moveToRandomTable(Entity customer) {
 
-        int randomTableIndex = (int)(Math.random() * TABLE_POSITIONS.length);
-        int[] targetTable = TABLE_POSITIONS[randomTableIndex];
+    private void moveToRandomTable(Entity customer) {
+        // Buscar una mesa disponible
+        int availableTableIndex = findAvailableTable();
+
+        if (availableTableIndex == -1) {
+            // No hay mesas disponibles, poner al cliente en espera
+            waitingCustomers.offer(customer);
+            positionCustomerInWaitingLine(customer);
+            return;
+        }
+
+        // Marcar la mesa como ocupada
+        tableOccupied[availableTableIndex] = true;
+
+        int[] targetTable = TABLE_POSITIONS[availableTableIndex];
 
         double targetX = targetTable[0] * TILE_SIZE;
         double targetY = targetTable[1] * TILE_SIZE;
-
 
         Point2D currentPos = customer.getPosition();
 
@@ -170,6 +253,7 @@ public class FXGLGameApp extends GameApplication {
         if (stepsX > 0) {
             for (int i = 0; i <= stepsX; i++) {
                 final int step = i;
+                final int tableIndex = availableTableIndex;
                 runOnce(() -> {
                     entityBuilder()
                             .at(customer.getPosition())
@@ -179,19 +263,19 @@ public class FXGLGameApp extends GameApplication {
                     customer.translate(diffX > 0 ? 25 : -25, 0);
 
                     if (step == stepsX) {
-                        moveCustomerY(customer, diffY);
+                        moveCustomerY(customer, diffY, tableIndex);
                     }
                 }, Duration.seconds(0.2 * i));
             }
         } else {
-            // Si no hay movimiento en X, comenzar directamente con Y
-            moveCustomerY(customer, diffY);
+            moveCustomerY(customer, diffY, availableTableIndex);
         }
     }
 
-    private void moveCustomerY(Entity customer, double diffY) {
+    private void moveCustomerY(Entity customer, double diffY, int tableIndex) {
         int stepsY = (int)Math.abs(diffY / 25);
         for (int i = 0; i <= stepsY; i++) {
+            final int step = i;
             runOnce(() -> {
                 entityBuilder()
                         .at(customer.getPosition())
@@ -199,11 +283,173 @@ public class FXGLGameApp extends GameApplication {
                         .buildAndAttach();
 
                 customer.translate(0, diffY > 0 ? 25 : -25);
+
+                if (step == stepsY) {
+                    System.out.println("Cliente llegó a mesa: " + tableIndex);
+                    System.out.println("Clientes en la cola de servicio: " + serveQueue.size());
+                    customer.setProperty("assignedTable", tableIndex);
+
+                    // Añadir el cliente a la cola solo si no está ya en ella
+                    if (!serveQueue.contains(customer)) {
+                        serveQueue.offer(customer);
+
+                        if (waiter != null) {
+                            System.out.println("Waiter encontrado: " + waiter);
+                            System.out.println("Waiter disponible: " + isWaiterAvailable);
+
+                            if (isWaiterAvailable) {
+                                isWaiterAvailable = false;
+                                moveWaiterToCustomer(waiter, customer);
+                            }
+                        } else {
+                            System.out.println("No se encontró waiter");
+                        }
+                    }
+                }
             }, Duration.seconds(0.2 * i));
         }
     }
 
+    private int findAvailableTable() {
+        for (int i = 0; i < tableOccupied.length; i++) {
+            if (!tableOccupied[i]) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private void moveWaiterToCustomer(Entity waiter, Entity customer) {
+
+        System.out.println("Moviendo waiter a cliente");
+        System.out.println("Posición waiter: " + waiter.getPosition());
+        System.out.println("Posición cliente: " + customer.getPosition());
+
+        Point2D customerPos = customer.getPosition();
+
+        double diffX = customerPos.getX() - waiter.getPosition().getX();
+        double diffY = customerPos.getY() - waiter.getPosition().getY();
+
+        int stepsX = (int)Math.abs(diffX / 25);
+
+        if (stepsX > 0) {
+            for (int i = 0; i <= stepsX; i++) {
+                final int step = i;
+                runOnce(() -> {
+                    waiter.translate(diffX > 0 ? 25 : -25, 0);
+
+                    // Cuando termina el movimiento horizontal, comenzar movimiento vertical
+                    if (step == stepsX) {
+                        moveWaiterVertical(waiter, customer, diffY);
+                    }
+                }, Duration.seconds(0.2 * i));
+            }
+        } else {
+            // Si no hay movimiento horizontal, ir directo al movimiento vertical
+            moveWaiterVertical(waiter, customer, diffY);
+        }
+    }
+
+    private void moveWaiterVertical(Entity waiter, Entity customer, double diffY) {
+        int stepsY = (int)Math.abs(diffY / 25);
+        for (int i = 0; i <= stepsY; i++) {
+            final int step = i;
+            runOnce(() -> {
+                waiter.translate(0, diffY > 0 ? 25 : -25);
+
+                // Cuando llega a la mesa, simular tomar la orden
+                if (step == stepsY) {
+                    takeOrder(waiter, customer);
+                }
+            }, Duration.seconds(0.2 * i));
+        }
+    }
+
+    private void takeOrder(Entity waiter, Entity customer) {
+
+        runOnce(() -> {
+            // Aquí podrías añadir alguna animación o efecto de tomar la orden
+            // Una vez tomada la orden, volver a la posición original y atender al siguiente cliente
+            returnWaiterToOriginalPosition(waiter, customer);
+        }, Duration.seconds(2));
+    }
+
+    private void returnWaiterToOriginalPosition(Entity waiter, Entity customer) {
+        // Agregar verificaciones de nulidad
+        if (waiter == null) return;
+
+        Point2D originalPos = new Point2D(680, 90);
+        Point2D currentPos = waiter.getPosition();
+
+        double diffX = originalPos.getX() - currentPos.getX();
+        double diffY = originalPos.getY() - currentPos.getY();
+
+        int stepsX = (int)Math.abs(diffX / 25);
+
+        // Movimiento de regreso horizontal
+        if (stepsX > 0) {
+            for (int i = 0; i <= stepsX; i++) {
+                final int step = i;
+                runOnce(() -> {
+                    // Verificar que el waiter aún exista
+                    if (waiter.isActive()) {
+                        waiter.translate(diffX > 0 ? 25 : -25, 0);
+
+                        // Cuando termina el movimiento horizontal, comenzar movimiento vertical
+                        if (step == stepsX) {
+                            returnWaiterVertical(waiter, diffY);
+                        }
+                    }
+                }, Duration.seconds(0.2 * i));
+            }
+        } else {
+            // Si no hay movimiento horizontal, ir directo al movimiento vertical
+            returnWaiterVertical(waiter, diffY);
+        }
+    }
+
+    private void returnWaiterVertical(Entity waiter, double diffY) {
+        // Agregar verificaciones de nulidad y actividad
+        if (waiter == null || !waiter.isActive()) return;
+
+        int stepsY = (int)Math.abs(diffY / 25);
+        for (int i = 0; i <= stepsY; i++) {
+            final int step = i;
+            runOnce(() -> {
+                // Verificar que el waiter aún exista
+                if (waiter.isActive()) {
+                    waiter.translate(0, diffY > 0 ? 25 : -25);
+
+                    // Cuando termina el desplazamiento, volver exactamente a la posición original
+                    if (step == stepsY) {
+                        waiter.setPosition(680, 90);
+                        checkAndServeNextCustomer();
+                    }
+                }
+            }, Duration.seconds(0.2 * i));
+        }
+    }
+    private void checkAndServeNextCustomer() {
+        System.out.println("Verificando siguiente cliente para servir");
+
+        if (!serveQueue.isEmpty() && waiter != null) {
+            Entity nextCustomer = serveQueue.poll();
+
+            if (nextCustomer != null) {
+                isWaiterAvailable = false;
+                moveWaiterToCustomer(waiter, nextCustomer);
+            }
+        } else {
+
+            isWaiterAvailable = true;
+            System.out.println("No hay más clientes en la cola");
+        }
+    }
+
+
     public static void main(String[] args) {
         launch(args);
     }
+
+
 }
