@@ -5,6 +5,10 @@ import com.almasb.fxgl.app.GameSettings;
 import com.almasb.fxgl.entity.Entity;
 import com.almasb.fxgl.entity.SpawnData;
 import fxglapp.cliente.CustomerFactory;
+import fxglapp.models.EstadoOrden;
+import fxglapp.models.Orden;
+import fxglapp.ordenes.BufferComidas;
+import fxglapp.ordenes.BufferOrdenes;
 import fxglapp.ui.FloorFactory;
 import javafx.geometry.Point2D;
 
@@ -30,11 +34,15 @@ public class FXGLGameApp extends GameApplication {
     private Queue<Entity> serveQueue = new LinkedList<>(); // Cola para rastrear los clientes a ser atendidos
     private boolean isWaiterAvailable = true;
     private Entity waiter;
+    private Entity waiterOrder;
 
     // llegada de clientes
     private Queue<Entity> waitingCustomers = new LinkedList<>();
     private static final int MAX_RESTAURANT_CUSTOMERS = 12;
     private static final int TOTAL_CUSTOMERS = 20;
+
+    private BufferOrdenes bufferOrdenes = new BufferOrdenes();
+    private BufferComidas bufferComidas = new BufferComidas();
 
     @Override
     protected void initSettings(GameSettings settings) {
@@ -142,10 +150,13 @@ public class FXGLGameApp extends GameApplication {
         getGameWorld().addEntityFactory(new CustomerFactory());
         createFloors();
 
-        //generateCustomers();
-        //spawnCustomer();
-        waiter = spawn("waiter", new SpawnData(680, 90));
+        waiter = spawn("waiter_order", new SpawnData(680, 90));
+        waiterOrder = spawn("waiter", new SpawnData(680, 490));
         spawnCustomersSequence();
+
+        // iniciamos los hilos de procesamiento de órdenes
+        procesarOrdenes();
+        entregarOrdenes();
 
     }
 
@@ -368,9 +379,19 @@ public class FXGLGameApp extends GameApplication {
     private void takeOrder(Entity waiter, Entity customer) {
 
         runOnce(() -> {
-            // Aquí podrías añadir alguna animación o efecto de tomar la orden
-            // Una vez tomada la orden, volver a la posición original y atender al siguiente cliente
+
+            // Creamos la orden
+            Orden orden = new Orden(customer);
+
+            // agregar la orden al buffer
+            bufferOrdenes.agregarOrden(orden);
+
+            // Cambiar estado a la orden
+            orden.setEstado(EstadoOrden.EN_PROCESO);
+            System.out.println("[+] Estamos tomando la orden...");
+            // Regresa a su posición
             returnWaiterToOriginalPosition(waiter, customer);
+
         }, Duration.seconds(2));
     }
 
@@ -378,7 +399,7 @@ public class FXGLGameApp extends GameApplication {
         // Agregar verificaciones de nulidad
         if (waiter == null) return;
 
-        Point2D originalPos = new Point2D(680, 90);
+        Point2D originalPos = new Point2D(600, 90);
         Point2D currentPos = waiter.getPosition();
 
         double diffX = originalPos.getX() - currentPos.getX();
@@ -446,10 +467,110 @@ public class FXGLGameApp extends GameApplication {
         }
     }
 
+    private void procesarOrdenes() {
+        new Thread(() -> {
+            while (true) {
+                try {
+                    Orden orden = bufferOrdenes.obtenerOrden();
+
+                    // Simular tiempo de cocina
+                    Thread.sleep(3000);
+
+                    // Marcar orden como lista
+                    orden.setEstado(EstadoOrden.LISTO);
+                    System.out.println("[+] La ORDEN está lista!");
+
+                    // Agregar al buffer de comidas
+                    bufferComidas.agregarComida(orden);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+        }).start();
+    }
+
+    private void entregarOrdenes() {
+        new Thread(() -> {
+            while (true) {
+                try {
+                    Orden ordenLista = bufferComidas.verificarComidaLista(waiterOrder);
+
+                    if (ordenLista != null) {
+                        // Animar waiterOrder para entregar la orden
+                        animarEntregaOrden(ordenLista);
+                    } else {
+                        // Si no hay órdenes, volver a posición inicial
+                        waiterOrder.setPosition(450, 490);
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+        }).start();
+    }
+
+    private void animarEntregaOrden(Orden orden) {
+        Entity cliente = orden.getCliente();
+        Point2D clientePos = cliente.getPosition();
+
+        // Lógica de animación similar a tus métodos de movimiento existentes
+        moveWaiterOrderToCustomer(waiterOrder, cliente);
+    }
+
+    private void moveWaiterOrderToCustomer(Entity waiterOrder, Entity cliente) {
+        // Initial position of waiterOrder
+        Point2D initialPos = new Point2D(680, 490);
+
+        // Customer's position
+        Point2D clientPos = cliente.getPosition();
+
+        double diffX = clientPos.getX() - initialPos.getX();
+        double diffY = clientPos.getY() - initialPos.getY();
+
+        int stepsX = (int)Math.abs(diffX / 25);
+
+        // Horizontal movement
+        if (stepsX > 0) {
+            for (int i = 0; i <= stepsX; i++) {
+                final int step = i;
+                runOnce(() -> {
+                    waiterOrder.translate(diffX > 0 ? 25 : -25, 0);
+
+                    // When horizontal movement is complete, start vertical movement
+                    if (step == stepsX) {
+                        moveWaiterOrderVertical(waiterOrder, cliente, initialPos);
+                    }
+                }, Duration.seconds(0.2 * i));
+            }
+        } else {
+            // If no horizontal movement, go directly to vertical movement
+            moveWaiterOrderVertical(waiterOrder, cliente, initialPos);
+        }
+    }
+
+    private void moveWaiterOrderVertical(Entity waiterOrder, Entity cliente, Point2D initialPos) {
+        Point2D clientPos = cliente.getPosition();
+        double diffY = clientPos.getY() - waiterOrder.getPosition().getY();
+
+        int stepsY = (int)Math.abs(diffY / 25);
+        for (int i = 0; i <= stepsY; i++) {
+            final int step = i;
+            runOnce(() -> {
+                waiterOrder.translate(0, diffY > 0 ? 25 : -25);
+
+                // When it reaches the table, return to initial position
+                if (step == stepsY) {
+                    waiterOrder.setPosition(initialPos.getX(), initialPos.getY());
+                    System.out.println("Orden entregada al cliente");
+                }
+            }, Duration.seconds(0.2 * i));
+        }
+    }
 
     public static void main(String[] args) {
         launch(args);
     }
-
 
 }
