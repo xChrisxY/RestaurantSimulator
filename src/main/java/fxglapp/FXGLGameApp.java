@@ -12,12 +12,13 @@ import fxglapp.ordenes.BufferOrdenes;
 import fxglapp.ui.FloorFactory;
 import javafx.geometry.Point2D;
 
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.Queue;
+import java.util.Set;
+
 import static com.almasb.fxgl.dsl.FXGL.*;
-import com.almasb.fxgl.animation.Interpolators;
 import com.almasb.fxgl.dsl.components.ProjectileComponent;
-import javafx.animation.Interpolator;
 import javafx.util.Duration;
 
 public class FXGLGameApp extends GameApplication {
@@ -43,6 +44,8 @@ public class FXGLGameApp extends GameApplication {
 
     private BufferOrdenes bufferOrdenes = new BufferOrdenes();
     private BufferComidas bufferComidas = new BufferComidas();
+    private Set<Entity> servedCustomers = new HashSet<>(); // Añadir al inicio de la clase
+
 
     @Override
     protected void initSettings(GameSettings settings) {
@@ -300,9 +303,11 @@ public class FXGLGameApp extends GameApplication {
                     System.out.println("Clientes en la cola de servicio: " + serveQueue.size());
                     customer.setProperty("assignedTable", tableIndex);
 
-                    // Añadir el cliente a la cola solo si no está ya en ella
-                    if (!serveQueue.contains(customer)) {
-                        serveQueue.offer(customer);
+                    // Verificar si el cliente ya ha sido atendido usando el conjunto
+                    if (!servedCustomers.contains(customer)) {
+                        if (!serveQueue.contains(customer)) {
+                            serveQueue.offer(customer);
+                        }
 
                         if (waiter != null) {
                             System.out.println("Waiter encontrado: " + waiter);
@@ -377,8 +382,9 @@ public class FXGLGameApp extends GameApplication {
     }
 
     private void takeOrder(Entity waiter, Entity customer) {
-
         runOnce(() -> {
+            // Marcar al cliente como atendido
+            servedCustomers.add(customer);
 
             // Creamos la orden
             Orden orden = new Orden(customer);
@@ -389,11 +395,12 @@ public class FXGLGameApp extends GameApplication {
             // Cambiar estado a la orden
             orden.setEstado(EstadoOrden.EN_PROCESO);
             System.out.println("[+] Estamos tomando la orden...");
+
             // Regresa a su posición
             returnWaiterToOriginalPosition(waiter, customer);
-
         }, Duration.seconds(2));
     }
+
 
     private void returnWaiterToOriginalPosition(Entity waiter, Entity customer) {
         // Agregar verificaciones de nulidad
@@ -450,8 +457,18 @@ public class FXGLGameApp extends GameApplication {
             }, Duration.seconds(0.2 * i));
         }
     }
+
     private void checkAndServeNextCustomer() {
         System.out.println("Verificando siguiente cliente para servir");
+
+        // Filtrar clientes no atendidos
+        Queue<Entity> unservedCustomers = new LinkedList<>();
+        for (Entity customer : serveQueue) {
+            if (!servedCustomers.contains(customer)) {
+                unservedCustomers.offer(customer);
+            }
+        }
+        serveQueue = unservedCustomers;
 
         if (!serveQueue.isEmpty() && waiter != null) {
             Entity nextCustomer = serveQueue.poll();
@@ -461,7 +478,6 @@ public class FXGLGameApp extends GameApplication {
                 moveWaiterToCustomer(waiter, nextCustomer);
             }
         } else {
-
             isWaiterAvailable = true;
             System.out.println("No hay más clientes en la cola");
         }
@@ -520,10 +536,9 @@ public class FXGLGameApp extends GameApplication {
     }
 
     private void moveWaiterOrderToCustomer(Entity waiterOrder, Entity cliente) {
-        // Initial position of waiterOrder
+
         Point2D initialPos = new Point2D(680, 490);
 
-        // Customer's position
         Point2D clientPos = cliente.getPosition();
 
         double diffX = clientPos.getX() - initialPos.getX();
@@ -531,7 +546,6 @@ public class FXGLGameApp extends GameApplication {
 
         int stepsX = (int)Math.abs(diffX / 25);
 
-        // Horizontal movement
         if (stepsX > 0) {
             for (int i = 0; i <= stepsX; i++) {
                 final int step = i;
@@ -560,12 +574,110 @@ public class FXGLGameApp extends GameApplication {
             runOnce(() -> {
                 waiterOrder.translate(0, diffY > 0 ? 25 : -25);
 
-                // When it reaches the table, return to initial position
+                // When it reaches the table, start customer exit countdown
                 if (step == stepsY) {
                     waiterOrder.setPosition(initialPos.getX(), initialPos.getY());
                     System.out.println("Orden entregada al cliente");
+
+                    // Mark the table as no longer occupied
+                    int tableIndex = cliente.getInt("assignedTable");
+                    tableOccupied[tableIndex] = false;
+
+                    // Wait 10 seconds before customer leaves
+                    runOnce(() -> {
+                        customerLeaveRestaurant(cliente);
+                    }, Duration.seconds(10));
                 }
             }, Duration.seconds(0.2 * i));
+        }
+    }
+
+    private void customerLeaveRestaurant(Entity customer) {
+        Point2D currentPos = customer.getPosition();
+        Point2D doorPos = new Point2D(120, 540);  // Position of the restaurant door
+        Point2D exitPos = new Point2D(65, 0);  // Exit point similar to entry point
+
+        // First, move to the door
+        double diffXToDoor = doorPos.getX() - currentPos.getX();
+        double diffYToDoor = doorPos.getY() - currentPos.getY();
+
+        int stepsXToDoor = (int)Math.abs(diffXToDoor / 25);
+
+        // Horizontal movement to door
+        if (stepsXToDoor > 0) {
+            for (int i = 0; i <= stepsXToDoor; i++) {
+                final int step = i;
+                runOnce(() -> {
+                    customer.translate(diffXToDoor > 0 ? 25 : -25, 0);
+
+                    // When horizontal movement to door is complete, start vertical movement
+                    if (step == stepsXToDoor) {
+                        customerMoveToDoorVertical(customer, diffYToDoor, exitPos);
+                    }
+                }, Duration.seconds(0.2 * i));
+            }
+        } else {
+            // If no horizontal movement, go directly to vertical movement
+            customerMoveToDoorVertical(customer, diffYToDoor, exitPos);
+        }
+    }
+
+    private void customerLeaveVertical(Entity customer, double diffY) {
+        int stepsY = (int)Math.abs(diffY / 25);
+        for (int i = 0; i <= stepsY; i++) {
+            final int step = i;
+            runOnce(() -> {
+                customer.translate(0, diffY > 0 ? 25 : -25);
+
+                // When customer reaches exit, remove from game
+                if (step == stepsY) {
+                    customer.removeFromWorld();
+
+                    // Optional: check if more customers need to enter
+                    checkAndMoveWaitingCustomer();
+                }
+            }, Duration.seconds(0.2 * i));
+        }
+    }
+
+    private void customerMoveToDoorVertical(Entity customer, double diffYToDoor, Point2D exitPos) {
+        int stepsYToDoor = (int)Math.abs(diffYToDoor / 25);
+        for (int i = 0; i <= stepsYToDoor; i++) {
+            final int step = i;
+            runOnce(() -> {
+                customer.translate(0, diffYToDoor > 0 ? 25 : -25);
+
+                // When customer reaches door, start exit movement
+                if (step == stepsYToDoor) {
+                    customerFinalExit(customer, exitPos);
+                }
+            }, Duration.seconds(0.2 * i));
+        }
+    }
+
+    private void customerFinalExit(Entity customer, Point2D exitPos) {
+        Point2D doorPos = new Point2D(120, 540);
+        double diffX = exitPos.getX() - doorPos.getX();
+        double diffY = exitPos.getY() - doorPos.getY();
+
+        int stepsX = (int)Math.abs(diffX / 25);
+
+        // Horizontal movement from door to exit
+        if (stepsX > 0) {
+            for (int i = 0; i <= stepsX; i++) {
+                final int step = i;
+                runOnce(() -> {
+                    customer.translate(diffX > 0 ? 25 : -25, 0);
+
+                    // When horizontal movement is complete, start vertical movement
+                    if (step == stepsX) {
+                        customerLeaveVertical(customer, diffY);
+                    }
+                }, Duration.seconds(0.2 * i));
+            }
+        } else {
+            // If no horizontal movement, go directly to vertical movement
+            customerLeaveVertical(customer, diffY);
         }
     }
 
