@@ -1,8 +1,6 @@
 package fxglapp.ordenes;
 
 import com.almasb.fxgl.entity.Entity;
-import fxglapp.models.EstadoOrden;
-import fxglapp.models.Orden;
 
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.locks.Condition;

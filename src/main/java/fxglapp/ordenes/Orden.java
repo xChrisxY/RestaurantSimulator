@@ -1,4 +1,4 @@
-package fxglapp.models;
+package fxglapp.ordenes;
 
 import com.almasb.fxgl.entity.Entity;
 

@@ -1,7 +1,5 @@
 package fxglapp.ordenes;
 
-import fxglapp.models.Orden;
-
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;

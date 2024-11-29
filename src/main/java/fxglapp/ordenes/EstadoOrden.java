@@ -1,4 +1,4 @@
-package fxglapp.models;
+package fxglapp.ordenes;
 
 public enum EstadoOrden {
     PENDIENTE,

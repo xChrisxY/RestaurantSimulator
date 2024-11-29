@@ -244,29 +244,6 @@ public class FloorFactory implements EntityFactory {
                 .build();
     }
 
-    @Spawns("waiter")
-    public Entity newWaiterTile(SpawnData data) {
-        ImageView tableImage = new ImageView("assets/waiter.png");
-        tableImage.setFitWidth(TILE_SIZE * 1.7);
-        tableImage.setFitHeight(TILE_SIZE * 1.7);
-
-        return entityBuilder(data)
-                .view(tableImage)
-                .zIndex(0)
-                .build();
-    }
-
-    @Spawns("waiter_order")
-    public Entity newWaiterOrderTile(SpawnData data) {
-        ImageView tableImage = new ImageView("assets/waiter_order.png");
-        tableImage.setFitWidth(TILE_SIZE * 1.7);
-        tableImage.setFitHeight(TILE_SIZE * 1.7);
-
-        return entityBuilder(data)
-                .view(tableImage)
-                .zIndex(0)
-                .build();
-    }
 
 
 }
