@@ -12,10 +12,7 @@ import fxglapp.ordenes.BufferOrdenes;
 import fxglapp.ui.FloorFactory;
 import javafx.geometry.Point2D;
 
-import java.util.HashSet;
-import java.util.LinkedList;
-import java.util.Queue;
-import java.util.Set;
+import java.util.*;
 
 import static com.almasb.fxgl.dsl.FXGL.*;
 import com.almasb.fxgl.dsl.components.ProjectileComponent;
@@ -41,6 +38,8 @@ public class FXGLGameApp extends GameApplication {
     private Queue<Entity> waitingCustomers = new LinkedList<>();
     private static final int MAX_RESTAURANT_CUSTOMERS = 12;
     private static final int TOTAL_CUSTOMERS = 20;
+    private static final int WAITING_LINE_X = 10;
+    private static final int WAITING_LINE_SPACING = 50;
 
     private BufferOrdenes bufferOrdenes = new BufferOrdenes();
     private BufferComidas bufferComidas = new BufferComidas();
@@ -163,22 +162,35 @@ public class FXGLGameApp extends GameApplication {
 
     }
 
-    private void spawnCustomersSequence() {
+    public void spawnCustomersSequence() {
+        double lambda = 0.5;
+        Random random = new Random();
+
         for (int i = 1; i <= TOTAL_CUSTOMERS; i++) {
             final int customerNumber = i;
+            double timeBetweenArrivals = -Math.log(1.0 - random.nextDouble()) / lambda;
+
             runOnce(() -> {
                 Entity customer = spawn("client_1", 65, 0);
 
-                if (getGameWorld().getEntities().stream().filter(e -> e.getType().toString().contains("client")).count() < TOTAL_CUSTOMERS) {
+                // Siempre verificar primero si hay espacio o cola
+                if (getGameWorld().getEntities().stream()
+                        .filter(e -> e.getType().toString().contains("client")).count() < MAX_RESTAURANT_CUSTOMERS) {
 
-                    moveCustomerInside(customer);
-
+                    // Si hay clientes en cola, agregar a la cola
+                    if (!waitingCustomers.isEmpty()) {
+                        waitingCustomers.offer(customer);
+                        positionCustomerInWaitingLine(customer);
+                    } else {
+                        // Si no hay cola, intentar mover al cliente a una mesa
+                        moveCustomerInside(customer);
+                    }
                 } else {
-
+                    // Si se alcanza el máximo de clientes, agregar a la cola
                     waitingCustomers.offer(customer);
                     positionCustomerInWaitingLine(customer);
                 }
-            }, Duration.seconds(customerNumber * 2)); // Espaciar la llegada
+            }, Duration.seconds(timeBetweenArrivals * customerNumber));
         }
     }
 
@@ -205,16 +217,70 @@ public class FXGLGameApp extends GameApplication {
     }
 
     private void positionCustomerInWaitingLine(Entity customer) {
-        int waitingLineX = 10;  // Posición X de la fila de espera
-        int waitingLineY = 25 + (waitingCustomers.size() * 65);  // Espaciar clientes verticalmente
+        // Calcular la posición exacta basada en la cantidad de clientes en la cola
+        // Ahora agregaremos clientes desde arriba hacia abajo
+        int queuePosition = waitingCustomers.size() - 1;
+        int waitingLineY = 500 - (queuePosition * WAITING_LINE_SPACING);
 
-        customer.setPosition(waitingLineX, waitingLineY);
+        customer.setPosition(WAITING_LINE_X, waitingLineY);
     }
 
     private void checkAndMoveWaitingCustomer() {
+        // Verificar si hay mesas disponibles y clientes en cola
         if (!waitingCustomers.isEmpty()) {
-            Entity waitingCustomer = waitingCustomers.poll();
-            moveToRandomTable(waitingCustomer);
+            int availableTableIndex = findAvailableTable();
+
+            if (availableTableIndex != -1) {
+                // Encontrar el cliente más cercano a la entrada (el primero en la fila)
+                Entity nextWaitingCustomer = findNearestCustomerToEntrance();
+
+                if (nextWaitingCustomer != null) {
+                    // Remover el cliente de la cola
+                    waitingCustomers.remove(nextWaitingCustomer);
+
+                    // Mover el cliente a la mesa
+                    moveToRandomTable(nextWaitingCustomer);
+
+                    // Reposicionar los clientes restantes en la cola
+                    repositionWaitingCustomers();
+                }
+            }
+        }
+    }
+
+    private Entity findNearestCustomerToEntrance() {
+        // Encontrar el cliente con la posición Y más alta (más cerca de la puerta)
+        return waitingCustomers.stream()
+                .max(Comparator.comparingDouble(customer -> customer.getPosition().getY()))
+                .orElse(null);
+    }
+
+
+    private void repositionWaitingCustomers() {
+        // Reposicionar todos los clientes en la cola para mantener un espaciado uniforme
+        List<Entity> currentWaitingCustomers = new ArrayList<>(waitingCustomers);
+
+        for (int i = 0; i < currentWaitingCustomers.size(); i++) {
+            Entity customer = currentWaitingCustomers.get(i);
+            // Calcular la nueva posición Y desde arriba hacia abajo
+            int waitingLineY = 500 - (i * WAITING_LINE_SPACING);
+
+            // Mover el cliente suavemente a su nueva posición
+            moveCustomerInQueue(customer, waitingLineY);
+        }
+    }
+
+
+    private void moveCustomerInQueue(Entity customer, int targetY) {
+        Point2D currentPos = customer.getPosition();
+        double diffY = targetY - currentPos.getY();
+
+        int stepsY = (int)Math.abs(diffY / 25);
+        for (int i = 0; i <= stepsY; i++) {
+            final int step = i;
+            runOnce(() -> {
+                customer.translate(0, diffY > 0 ? 25 : -25);
+            }, Duration.seconds(0.2 * i));
         }
     }
 
@@ -586,7 +652,7 @@ public class FXGLGameApp extends GameApplication {
                     // Wait 10 seconds before customer leaves
                     runOnce(() -> {
                         customerLeaveRestaurant(cliente);
-                    }, Duration.seconds(10));
+                    }, Duration.seconds(5));
                 }
             }, Duration.seconds(0.2 * i));
         }
