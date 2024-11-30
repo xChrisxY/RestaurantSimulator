@@ -3,9 +3,6 @@ package fxglapp.cliente;
 import com.almasb.fxgl.entity.Entity;
 
 import javafx.scene.image.Image;
-
-import com.almasb.fxgl.entity.Entity;
-import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 
 public class CustomerEntity extends Entity {
@@ -18,7 +15,6 @@ public class CustomerEntity extends Entity {
 
         getViewComponent().addChild(imageView);
     }
-
 
 }
 
