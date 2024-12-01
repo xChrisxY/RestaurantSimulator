@@ -4,6 +4,8 @@ import com.almasb.fxgl.app.GameApplication;
 import com.almasb.fxgl.app.GameSettings;
 import fxglapp.cliente.CustomerFactory;
 import fxglapp.cliente.CustomerManager;
+//import fxglapp.cocinero.CookerFactory;
+
 import fxglapp.mesero.WaiterFactory;
 import fxglapp.mesero.WaiterManager;
 import fxglapp.ordenes.BufferComidas;
@@ -36,10 +38,10 @@ public class FXGLGameApp extends GameApplication {
         getGameWorld().addEntityFactory(new FloorFactory());
         getGameWorld().addEntityFactory(new CustomerFactory());
         getGameWorld().addEntityFactory(new WaiterFactory());
+        //getGameWorld().addEntityFactory(new CookerFactory());
 
         GameWorldBuilder.createWorld(tableOccupied);
 
-        // Inicializar WaiterManager
         waiterManager = new WaiterManager(bufferOrdenes, bufferComidas, tableOccupied);
         waiterManager.initWaiters();
 

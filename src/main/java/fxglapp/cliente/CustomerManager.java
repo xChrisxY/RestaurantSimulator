@@ -189,7 +189,6 @@ public class CustomerManager {
                     System.out.println("Cliente llegó a mesa: " + tableIndex);
                     customer.setProperty("assignedTable", tableIndex);
 
-                    // Notificar al WaiterManager que el cliente está listo para ser atendido
                     waiterManager.customerSeated(customer);
                 }
             }, Duration.seconds(0.2 * i));

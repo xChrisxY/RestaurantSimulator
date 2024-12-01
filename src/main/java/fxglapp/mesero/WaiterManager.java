@@ -41,9 +41,6 @@ public class WaiterManager {
         this.customerManager = customerManager;
     }
 
-    /**
-     * Método llamado cuando un cliente se sienta y está listo para ser atendido.
-     */
     public void customerSeated(Entity customer) {
         if (!servedCustomers.contains(customer)) {
             if (!serveQueue.contains(customer)) {
