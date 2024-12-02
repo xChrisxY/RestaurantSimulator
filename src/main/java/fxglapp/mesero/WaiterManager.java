@@ -33,7 +33,7 @@ public class WaiterManager {
         waiter = spawn("waiter_order", 680, 90);
         waiterOrder = spawn("waiter", 680, 490);
 
-        procesarOrdenes();
+        //procesarOrdenes();
         entregarOrdenes();
     }
 

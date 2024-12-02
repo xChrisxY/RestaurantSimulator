@@ -6,6 +6,7 @@ import fxglapp.cliente.CustomerFactory;
 import fxglapp.cliente.CustomerManager;
 //import fxglapp.cocinero.CookerFactory;
 
+import fxglapp.cocinero.CookerManager;
 import fxglapp.mesero.WaiterFactory;
 import fxglapp.mesero.WaiterManager;
 import fxglapp.ordenes.BufferComidas;
@@ -22,6 +23,7 @@ public class FXGLGameApp extends GameApplication {
 
     private CustomerManager customerManager;
     private WaiterManager waiterManager;
+    private CookerManager cookerManager;
 
     private BufferOrdenes bufferOrdenes = new BufferOrdenes();
     private BufferComidas bufferComidas = new BufferComidas();
@@ -44,6 +46,9 @@ public class FXGLGameApp extends GameApplication {
 
         waiterManager = new WaiterManager(bufferOrdenes, bufferComidas, tableOccupied);
         waiterManager.initWaiters();
+
+        cookerManager = new CookerManager(bufferOrdenes, bufferComidas);
+        cookerManager.initCookers();
 
         customerManager = new CustomerManager(tableOccupied, waiterManager);
         customerManager.spawnCustomersSequence();
