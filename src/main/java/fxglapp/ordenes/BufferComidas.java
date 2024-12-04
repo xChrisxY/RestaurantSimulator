@@ -8,6 +8,7 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 public class BufferComidas {
+
     private ConcurrentLinkedQueue<Orden> buffer = new ConcurrentLinkedQueue<>();
     private Lock lock = new ReentrantLock();
     private Condition comidaListaCondition = lock.newCondition();

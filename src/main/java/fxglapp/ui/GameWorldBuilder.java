@@ -66,8 +66,8 @@ public class GameWorldBuilder {
         spawn("tableCook", chefTableX1, chefTableY1);
         spawn("tableCook", chefTableX2, chefTableY2);
 
-        spawn("cooker", chefTableX1, chefTableY1 - 50);
-        spawn("cooker", chefTableX2, chefTableY2 - 50);
+        //spawn("cooker", chefTableX1, chefTableY1 - 50);
+        //spawn("cooker", chefTableX2, chefTableY2 - 50);
 
         spawn("kitchenset", 500, 25);
         spawn("kitchenset", 200, 25);

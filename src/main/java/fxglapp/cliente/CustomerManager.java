@@ -85,20 +85,18 @@ public class CustomerManager {
         customer.setPosition(WAITING_LINE_X, waitingLineY);
     }
 
-    private void checkAndMoveWaitingCustomer() {
-        if (!waitingCustomers.isEmpty()) {
-            int availableTableIndex = findAvailableTable();
+    private synchronized void checkAndMoveWaitingCustomer() {
 
-            if (availableTableIndex != -1) {
-                Entity nextWaitingCustomer = findNearestCustomerToEntrance();
+        while (!waitingCustomers.isEmpty() && findAvailableTable() != -1) {
+            Entity nextWaitingCustomer = findNearestCustomerToEntrance();
+            if (nextWaitingCustomer != null) {
 
-                if (nextWaitingCustomer != null) {
-                    waitingCustomers.remove(nextWaitingCustomer);
-                    moveToRandomTable(nextWaitingCustomer);
-                    repositionWaitingCustomers();
-                }
+                waitingCustomers.remove(nextWaitingCustomer);
+
+                moveToRandomTable(nextWaitingCustomer);
             }
         }
+        repositionWaitingCustomers();
     }
 
     private Entity findNearestCustomerToEntrance() {
@@ -189,7 +187,6 @@ public class CustomerManager {
                     System.out.println("Cliente llegó a mesa: " + tableIndex);
                     customer.setProperty("assignedTable", tableIndex);
 
-                    // Notificar al WaiterManager que el cliente está listo para ser atendido
                     waiterManager.customerSeated(customer);
                 }
             }, Duration.seconds(0.2 * i));
