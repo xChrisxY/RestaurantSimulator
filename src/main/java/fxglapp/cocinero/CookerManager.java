@@ -1,63 +1,42 @@
 package fxglapp.cocinero;
 
-import com.almasb.fxgl.entity.Entity;
-import fxglapp.ordenes.BufferOrdenes;
-import fxglapp.ordenes.BufferComidas;
-import fxglapp.ordenes.Orden;
-import fxglapp.ordenes.EstadoOrden;
+import fxglapp.ordenes.OrdenMonitor;
+
+import java.util.List;
 
 import static com.almasb.fxgl.dsl.FXGL.*;
 
 public class CookerManager {
-    private Entity cooker1;
-    private Entity cooker2;
-    private BufferOrdenes bufferOrdenes;
-    private BufferComidas bufferComidas;
+    private Cooker cooker1;
+    private Cooker cooker2;
+    private OrdenMonitor ordenMonitor;
+    private List<Cooker> cookers;
 
-    public CookerManager(BufferOrdenes bufferOrdenes, BufferComidas bufferComidas) {
-        this.bufferOrdenes = bufferOrdenes;
-        this.bufferComidas = bufferComidas;
+    public CookerManager(OrdenMonitor ordenMonitor) {
+        this.ordenMonitor = ordenMonitor;
     }
 
     public void initCookers() {
-        cooker1 = spawn("cooker", 300, -18);
-        cooker2 = spawn("cooker", 600, -18);
+        cooker1 = new Cooker(ordenMonitor);
+        cooker2 = new Cooker(ordenMonitor);
 
-        // Iniciar procesos de cocina concurrentes
-        initCookerThread(cooker1);
-        initCookerThread(cooker2);
+        cooker1.crearCocinero(225, -90);
+        cooker2.crearCocinero(525, -90);
+
+        new Thread(cooker1).start();
+        new Thread(cooker2).start();
     }
 
-    private void initCookerThread(Entity cooker) {
-        new Thread(() -> {
-            while (true) {
-                try {
-                    Orden orden = bufferOrdenes.obtenerOrden();
+    public void stopCookers() {
+        cooker1.detener();
+        cooker2.detener();
+    }
 
-                    prepararOrden(cooker, orden);
-
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    break;
-                }
+    public void detenerTodosLosCocinerros() {
+        if (cookers != null) {
+            for (Cooker cooker : cookers) {
+                cooker.detener();
             }
-        }).start();
-    }
-
-    private void prepararOrden(Entity cooker, Orden orden) throws InterruptedException {
-
-        animarPreparacionOrden(cooker);
-
-        Thread.sleep(3000);
-
-        orden.setEstado(EstadoOrden.LISTO);
-        System.out.println("[+] La ORDEN está lista! Cocinero: " + cooker);
-
-        // Agregar al buffer de comidas
-        bufferComidas.agregarComida(orden);
-    }
-
-    private void animarPreparacionOrden(Entity cooker) {
-        System.out.println("[+] Cocinando");
+        }
     }
 }

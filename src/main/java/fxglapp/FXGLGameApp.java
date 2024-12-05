@@ -6,11 +6,13 @@ import fxglapp.cliente.CustomerFactory;
 import fxglapp.cliente.CustomerManager;
 //import fxglapp.cocinero.CookerFactory;
 
+import fxglapp.cocinero.Cooker;
 import fxglapp.cocinero.CookerManager;
 import fxglapp.mesero.WaiterFactory;
 import fxglapp.mesero.WaiterManager;
 import fxglapp.ordenes.BufferComidas;
 import fxglapp.ordenes.BufferOrdenes;
+import fxglapp.ordenes.OrdenMonitor;
 import fxglapp.ui.FloorFactory;
 import fxglapp.ui.GameWorldBuilder;
 
@@ -28,6 +30,8 @@ public class FXGLGameApp extends GameApplication {
     private BufferOrdenes bufferOrdenes = new BufferOrdenes();
     private BufferComidas bufferComidas = new BufferComidas();
 
+    private OrdenMonitor ordenMonitor = new OrdenMonitor();
+
     @Override
     protected void initSettings(GameSettings settings) {
         settings.setWidth(850);
@@ -44,10 +48,15 @@ public class FXGLGameApp extends GameApplication {
 
         GameWorldBuilder.createWorld(tableOccupied);
 
-        waiterManager = new WaiterManager(bufferOrdenes, bufferComidas, tableOccupied);
-        waiterManager.initWaiters();
+        //waiterManager = new WaiterManager(bufferOrdenes, bufferComidas, tableOccupied);
+        //waiterManager.initWaiters();
 
-        cookerManager = new CookerManager(bufferOrdenes, bufferComidas);
+        //cookerManager = new CookerManager(bufferOrdenes, bufferComidas);
+        //cookerManager.initCookers();
+
+        waiterManager = new WaiterManager(ordenMonitor, tableOccupied);
+        cookerManager = new CookerManager(ordenMonitor);
+        waiterManager.initWaiters();
         cookerManager.initCookers();
 
         customerManager = new CustomerManager(tableOccupied, waiterManager);
@@ -55,6 +64,7 @@ public class FXGLGameApp extends GameApplication {
 
         waiterManager.setCustomerManager(customerManager);
     }
+
 
     public static void main(String[] args) {
         launch(args);

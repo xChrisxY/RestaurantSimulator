@@ -1,39 +1,122 @@
 package fxglapp.mesero;
 
 import com.almasb.fxgl.entity.Entity;
+import fxglapp.ordenes.*;
 import javafx.geometry.Point2D;
 import javafx.util.Duration;
 import java.util.*;
+import java.util.concurrent.*;
 import static com.almasb.fxgl.dsl.FXGL.*;
 import fxglapp.cliente.CustomerManager;
-import fxglapp.ordenes.EstadoOrden;
-import fxglapp.ordenes.Orden;
-import fxglapp.ordenes.BufferComidas;
-import fxglapp.ordenes.BufferOrdenes;
 
-public class WaiterManager {
+public class WaiterManager implements Runnable {
 
     private Queue<Entity> serveQueue = new LinkedList<>();
     private boolean isWaiterAvailable = true;
     private Entity waiter;
     private Entity waiterOrder;
     private Set<Entity> servedCustomers = new HashSet<>();
-    private BufferOrdenes bufferOrdenes;
-    private BufferComidas bufferComidas;
     private boolean[] tableOccupied;
     private CustomerManager customerManager;
+    private OrdenMonitor ordenMonitor;
 
-    public WaiterManager(BufferOrdenes bufferOrdenes, BufferComidas bufferComidas, boolean[] tableOccupied) {
-        this.bufferOrdenes = bufferOrdenes;
-        this.bufferComidas = bufferComidas;
+    private Queue<Orden> ordenesPendientes = new LinkedList<>();
+    private List<Orden> ordenesListas = new ArrayList<>();
+
+    // Monitor lock para sincronización
+    private final Object waiterLock = new Object();
+    private boolean hasCustomers = false;
+
+    public WaiterManager(OrdenMonitor ordenMonitor, boolean[] tableOccupied) {
+        this.ordenMonitor = ordenMonitor;
         this.tableOccupied = tableOccupied;
     }
+
+    @Override
+    public void run() {
+        try {
+            while (!Thread.currentThread().isInterrupted()) {
+                synchronized (waiterLock) {
+                    // Mientras no haya clientes, esperar
+                    while (!hasCustomers) {
+                        System.out.println("Waiter está en reposo - esperando clientes");
+                        waiterLock.wait();
+                    }
+                }
+
+                while (!ordenesPendientes.isEmpty()) {
+                    procesarSiguienteOrden();
+                    Thread.sleep(3000);
+                }
+
+                synchronized (waiterLock) {
+                    hasCustomers = false;
+                    System.out.println("Waiter ha terminado de procesar órdenes");
+                }
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            System.out.println("Waiter thread interrumpido");
+        }
+    }
+
+    public void notifyCustomerArrived() {
+        synchronized (waiterLock) {
+            hasCustomers = true;
+            waiterLock.notify();
+        }
+    }
+
+    public void customerSeated(Entity customer) {
+        synchronized (waiterLock) {
+            if (!servedCustomers.contains(customer)) {
+                if (!serveQueue.contains(customer)) {
+                    serveQueue.offer(customer);
+                }
+
+                notifyCustomerArrived();
+
+                if (waiter != null && isWaiterAvailable) {
+                    isWaiterAvailable = false;
+                    moveWaiterToCustomer(waiter, customer);
+                }
+            }
+        }
+    }
+
+    public void agregarOrden(Orden nuevaOrden) {
+        synchronized (waiterLock) {
+            ordenesPendientes.add(nuevaOrden);
+
+            // Si es la primera orden, notificar
+            if (ordenesPendientes.size() == 1) {
+                waiterLock.notify();
+            }
+        }
+    }
+
+    public void checkIfAllCustomersServed() {
+        synchronized (waiterLock) {
+
+            boolean allTablesEmpty = true;
+            for (boolean occupied : tableOccupied) {
+                if (occupied) {
+                    allTablesEmpty = false;
+                    break;
+                }
+            }
+
+            if (allTablesEmpty) {
+                hasCustomers = false;
+                System.out.println("Restaurante vacío - Waiter en reposo");
+            }
+        }
+    }
+
 
     public void initWaiters() {
         waiter = spawn("waiter_order", 680, 90);
         waiterOrder = spawn("waiter", 680, 490);
-
-        //procesarOrdenes();
         entregarOrdenes();
     }
 
@@ -41,24 +124,18 @@ public class WaiterManager {
         this.customerManager = customerManager;
     }
 
-    public void customerSeated(Entity customer) {
-        if (!servedCustomers.contains(customer)) {
-            if (!serveQueue.contains(customer)) {
-                serveQueue.offer(customer);
-            }
-
-            if (waiter != null) {
-                System.out.println("Waiter encontrado: " + waiter);
-                System.out.println("Waiter disponible: " + isWaiterAvailable);
-
-                if (isWaiterAvailable) {
-                    isWaiterAvailable = false;
-                    moveWaiterToCustomer(waiter, customer);
-                }
-            } else {
-                System.out.println("No se encontró waiter");
-            }
+    private void procesarSiguienteOrden() {
+        if (ordenesPendientes.isEmpty()) {
+            return;
         }
+
+        Orden ordenActual = ordenesPendientes.poll();
+        if (ordenActual == null) {
+            return;
+        }
+
+        Entity customer = ordenActual.getCliente();
+        moveWaiterToCustomer(waiter, customer);
     }
 
     private void moveWaiterToCustomer(Entity waiter, Entity customer) {
@@ -108,9 +185,13 @@ public class WaiterManager {
             servedCustomers.add(customer);
 
             Orden orden = new Orden(customer);
-            bufferOrdenes.agregarOrden(orden);
-            orden.setEstado(EstadoOrden.EN_PROCESO);
-            System.out.println("[+] Estamos tomando la orden...");
+            try {
+                ordenMonitor.agregarOrden(orden);
+                orden.setEstado(EstadoOrden.EN_PROCESO);
+                System.out.println("[+] Estamos tomando la orden...");
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
 
             returnWaiterToOriginalPosition(waiter);
         }, Duration.seconds(2));
@@ -188,34 +269,11 @@ public class WaiterManager {
         }
     }
 
-    private void procesarOrdenes() {
-        new Thread(() -> {
-            while (true) {
-                try {
-                    Orden orden = bufferOrdenes.obtenerOrden();
-
-                    // Simular tiempo de cocina
-                    Thread.sleep(3000);
-
-                    // Marcar orden como lista
-                    orden.setEstado(EstadoOrden.LISTO);
-                    System.out.println("[+] La ORDEN está lista!");
-
-                    // Agregar al buffer de comidas
-                    bufferComidas.agregarComida(orden);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    break;
-                }
-            }
-        }).start();
-    }
-
     private void entregarOrdenes() {
         new Thread(() -> {
             while (true) {
                 try {
-                    Orden ordenLista = bufferComidas.verificarComidaLista(waiterOrder);
+                    Orden ordenLista = ordenMonitor.verificarComidaLista(waiterOrder);
 
                     if (ordenLista != null) {
                         animarEntregaOrden(ordenLista);
@@ -285,4 +343,6 @@ public class WaiterManager {
             }, Duration.seconds(0.2 * i));
         }
     }
+
+
 }
